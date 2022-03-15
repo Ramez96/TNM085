@@ -1,0 +1,7 @@
+A function that applies a force that is the input argument for one sample in a simulation.
+function newForce = newForce(t, F)
+if  t < 0.001
+    newForce = F;
+else
+    newForce = 0;
+end
