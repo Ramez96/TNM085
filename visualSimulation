@@ -1,0 +1,209 @@
+import bpy, math
+#A function that applies a force for one sample in a simulation.
+def impulse(t):
+    if t < 0.001:
+        return 0.5
+    else:
+        return 0
+#A function that applies a force that is the input argument for one sample in a simulation.
+def newImpulse(t,F):
+    if t < 0.001:
+        return F
+    else:
+        return 0
+
+#This function determines the distance between the pivot point of a rectangle and its center of mass projected on the same line with the help of basic trigonometry.
+def proj_mass(angle, thickness, height, sample):
+    z = 0
+    pivot_point = math.sqrt((thickness/2)**2+(height/2)**2)
+    if angle > math.atan(thickness/height):
+        z =  pivot_point*math.sin(angle)
+    elif sample == 1:
+        z =  thickness/2
+    else:
+        z =  -pivot_point*math.sin(angle)
+    return z
+#This function copies the selected object, it is necesseray so the pivot point is the same for every new object.
+def newCube():
+    bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked":False, "mode":'TRANSLATION'}, 
+    TRANSFORM_OT_translate={"value":(0, 0, 0), "orient_axis_ortho":'X', "orient_type":'GLOBAL', 
+    "orient_matrix":((1, 0, 0), (0, 1, 0), (0, 0, 1)), "orient_matrix_type":'GLOBAL', 
+    "constraint_axis":(False, False, False), "mirror":False, "use_proportional_edit":False, 
+    "proportional_edit_falloff":'SMOOTH', "proportional_size":1, "use_proportional_connected":False, 
+    "use_proportional_projected":False, "snap":False, "snap_target":'CLOSEST', "snap_point":(0, 0, 0), 
+    "snap_align":False, "snap_normal":(0, 0, 0), "gpencil_strokes":False, "cursor_transform":False, 
+    "texture_space":False, "remove_on_cancel":False, "view2d_edge_pan":False, "release_confirm":False, 
+    "use_accurate":False, "use_automerge_and_split":False})
+    
+#This function loops through a collection to scale and translate each object appropriately 
+def allCubes(myCollection):
+    
+    distance = 1/100
+    a = 0
+    newScales = [1.5, 1.5, 1.5]
+    
+    for c in myCollection:
+        if c == bpy.data.objects[0]:
+            continue
+
+        c.scale = newScales
+        c.location[0] = distance + a + c.dimensions[0]
+        distance *= 1.5
+        a = c.location[0]
+            
+        newScales[0] *= 1.5
+        newScales[1] *= 1.5
+        newScales[2] *= 1.5
+        
+#Euler approximation for the first domino
+def eulercalc(simulationTime,stepSize,mass,thickness, height,distance):
+    samples = simulationTime/stepSize
+    g = 9.82
+    d = math.sqrt(height**2+thickness**2)
+    J = mass*(height**2+ thickness**2)/12
+    angle = [0] * int(samples)
+    acc = [0] * int(samples)
+    vel = [0] * int(samples)
+    mg = [0] * int(samples)
+    i = 0
+    b = math.acos(distance/height)
+    collisionAngle = (math.pi/2)-b
+    for z in range(int(samples-1)):
+        mg[z] = mass*g*proj_mass(angle[z],thickness,height,z)
+        tao = impulse(i)*d +mg [z]
+        acc[z+1] = tao/J
+        vel[z+1] = vel[z] + stepSize*acc[z]
+        angle[z+1] = angle[z] + stepSize*vel[z]
+        
+        
+        if abs(angle[z]-collisionAngle) < 0.01:
+            vel[z+1] = 1
+            acc[z+1] = 1
+        
+        if angle[z+1] >= math.pi/2:
+            angle[z+1]  = math.pi/2
+        i += stepSize
+    return (angle, acc, vel, mg)
+#This is a simulation for a row of toppling dominoes with increasing sizes
+def newEuler(simulationTime, stepSize,mass,thickness, height,F,mg,r,k):
+    samples = simulationTime/stepSize
+    g = 9.82
+    J = mass*(height**2+ thickness**2)/12
+    i = 0
+    
+    angle = [0] * int(samples)
+    acc = [0] * int(samples)
+    vel = [0] * int(samples)
+    newMg = [0] * int(samples)
+    i = 0
+    for z in range(int(samples-1)):
+        tao = 0
+        if z >= k+1:
+            tao = newImpulse(i,F)*r + g*mass*proj_mass(angle[z],thickness,height,z)
+            tao += mg[z]
+            newMg[z] = tao
+            
+        acc[z+1] = tao/J
+        vel[z+1] = vel[z] + stepSize*acc[z]
+        angle[z+1] = angle[z] + stepSize*vel[z]
+        if abs(angle[z]-collisionAngle) < 0.01:
+            vel[z+1] = 1
+            acc[z+1] = 1
+        if angle[z+1] >= math.pi/2:
+            angle[z+1]  = math.pi/2
+        i += stepSize
+    return (angle, acc, vel, newMg) 
+            
+
+
+#Create new cubes and set position
+bricks = 12
+myCollection = bpy.data.collections['cubes'].objects
+
+#Part 1 is used to create more bricks and scaling them correctly. the amount of bricks is specified in the the line above. It needs to run twice for the code to work, first select the intial domino then run the script, after that unselect any domino and run the script again to position them correctly. After the bricks have been created move to the next part 
+#OBS!!! This part needs to be commented because it will create new bricks each time the script has run.
+"""
+for x in range(bricks):   
+    newCube()
+    
+allCubes(myCollection)
+
+"""
+#Part 2 is used to apply the euler approximation of each domino and keyframe it to create a simulation.
+#OBS!! runs only after a set of bricks have been created.
+
+height = 5.08/100
+width = 2.54/100
+thickness = 0.9525/100
+density = 940
+g = 9.82
+distance = 1/100
+mass = (height*width*thickness*density)
+J = mass*(height**2+ thickness**2)/12
+d = math.sqrt(height**2+thickness**2)
+
+totalTime = 4
+stepSize = 0.001
+samples = totalTime/stepSize
+
+
+
+totalAngle = [[0]]*len(myCollection)
+
+data = eulercalc(totalTime, stepSize, mass,thickness,height,distance)
+
+tiltAngle = math.acos(distance/height)
+collisionAngle = (math.pi/2) - tiltAngle
+
+for cube in myCollection:
+    if cube == bpy.data.objects[0]: 
+        b = 0
+        for x in data[0]:
+            cube.rotation_euler[1] = x
+            cube.keyframe_insert(data_path = 'rotation_euler',frame= b)
+            b += 1
+        continue
+    
+    test = min(data[0], key=lambda x:abs(x-collisionAngle))
+    a = math.sin(tiltAngle)*height
+    
+    
+    m = 0
+    for x in data[0]:
+        if test == x:
+            break
+        m+= 1
+    thickness = cube.dimensions[0]
+    width = cube.dimensions[1]
+    height = cube.dimensions[2]
+    mass = (height*width*thickness*density)
+    
+    J = mass*(height**2+ thickness**2)/12
+    r = math.sqrt(thickness**2+a**2)
+    
+    acc = data[1]
+    
+    Fr = (acc[m]*J)/height
+    Fx = Fr/math.cos(collisionAngle)
+    
+    data = newEuler(totalTime,stepSize, mass,thickness,height, Fx, data[3], r,m)
+    
+    b = 1
+    distance *= 1.5
+    for x in data[0]:
+        cube.rotation_euler[1] = x
+        cube.keyframe_insert(data_path = 'rotation_euler',frame= b)
+        b += 1
+
+
+"""
+for myCube in bpy.data.collections['cubes'].objects:
+    f = 0
+    data = newEuler(totalTime, stepSize, myCube.mass, myCube.thickness, myCube.height, Fx, data[3], r, k)
+    
+    for theta in data[0]:
+        myCube.rotation_euler[1] = theta
+        myCube.keyframe_insert(data_path = 'rotation_euler',frame= f)
+        f += 1
+        
+"""
